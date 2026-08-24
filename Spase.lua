@@ -1,10 +1,11 @@
--- Bob Auto Farm | Идёт пешком в портал + скрываемый GUI
+-- Bob Auto Farm | Портал: -1210, 328.2, 4
 -- Delta / большинство executor'ов
 
 local Players = game:GetService("Players")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 local farming = false
@@ -20,8 +21,8 @@ ScreenGui.Parent = game:GetService("CoreGui")
 
 local Main = Instance.new("Frame")
 Main.Name = "Main"
-Main.Size = UDim2.new(0, 260, 0, 280)
-Main.Position = UDim2.new(0.5, -130, 0.5, -140)
+Main.Size = UDim2.new(0, 270, 0, 310)
+Main.Position = UDim2.new(0.5, -135, 0.5, -155)
 Main.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
 Main.BorderSizePixel = 0
 Main.Parent = ScreenGui
@@ -78,19 +79,19 @@ CloseCorner.CornerRadius = UDim.new(0, 8)
 CloseCorner.Parent = CloseBtn
 
 local StatusLabel = Instance.new("TextLabel")
-StatusLabel.Size = UDim2.new(1, -32, 0, 22)
-StatusLabel.Position = UDim2.new(0, 16, 0, 58)
+StatusLabel.Size = UDim2.new(1, -32, 0, 20)
+StatusLabel.Position = UDim2.new(0, 16, 0, 52)
 StatusLabel.BackgroundTransparency = 1
 StatusLabel.Text = "Статус: Ожидание"
 StatusLabel.TextColor3 = Color3.fromRGB(160, 160, 180)
 StatusLabel.Font = Enum.Font.Gotham
-StatusLabel.TextSize = 14
+StatusLabel.TextSize = 13
 StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
 StatusLabel.Parent = Main
 
 local CounterLabel = Instance.new("TextLabel")
-CounterLabel.Size = UDim2.new(1, -32, 0, 22)
-CounterLabel.Position = UDim2.new(0, 16, 0, 84)
+CounterLabel.Size = UDim2.new(1, -32, 0, 20)
+CounterLabel.Position = UDim2.new(0, 16, 0, 74)
 CounterLabel.BackgroundTransparency = 1
 CounterLabel.Text = "Попыток: 0"
 CounterLabel.TextColor3 = Color3.fromRGB(140, 140, 160)
@@ -99,9 +100,20 @@ CounterLabel.TextSize = 13
 CounterLabel.TextXAlignment = Enum.TextXAlignment.Left
 CounterLabel.Parent = Main
 
+local CoordsLabel = Instance.new("TextLabel")
+CoordsLabel.Size = UDim2.new(1, -32, 0, 20)
+CoordsLabel.Position = UDim2.new(0, 16, 0, 96)
+CoordsLabel.BackgroundTransparency = 1
+CoordsLabel.Text = "XYZ: 0, 0, 0"
+CoordsLabel.TextColor3 = Color3.fromRGB(100, 200, 255)
+CoordsLabel.Font = Enum.Font.Gotham
+CoordsLabel.TextSize = 13
+CoordsLabel.TextXAlignment = Enum.TextXAlignment.Left
+CoordsLabel.Parent = Main
+
 local StartBtn = Instance.new("TextButton")
-StartBtn.Size = UDim2.new(0, 100, 0, 38)
-StartBtn.Position = UDim2.new(0.5, -110, 0, 130)
+StartBtn.Size = UDim2.new(0, 100, 0, 36)
+StartBtn.Position = UDim2.new(0.5, -110, 0, 135)
 StartBtn.BackgroundColor3 = Color3.fromRGB(40, 170, 100)
 StartBtn.Text = "Start"
 StartBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -114,8 +126,8 @@ StartCorner.CornerRadius = UDim.new(0, 10)
 StartCorner.Parent = StartBtn
 
 local StopBtn = Instance.new("TextButton")
-StopBtn.Size = UDim2.new(0, 100, 0, 38)
-StopBtn.Position = UDim2.new(0.5, 10, 0, 130)
+StopBtn.Size = UDim2.new(0, 100, 0, 36)
+StopBtn.Position = UDim2.new(0.5, 10, 0, 135)
 StopBtn.BackgroundColor3 = Color3.fromRGB(180, 55, 55)
 StopBtn.Text = "Stop"
 StopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -163,8 +175,19 @@ local function getHumanoid()
 	return char and char:FindFirstChildOfClass("Humanoid")
 end
 
--- Координаты красного портала (основные)
-local PORTAL_POS = Vector3.new(-8.5, 3.5, 92)
+-- Координаты в реальном времени
+RunService.RenderStepped:Connect(function()
+	local hrp = getHRP()
+	if hrp then
+		local pos = hrp.Position
+		CoordsLabel.Text = string.format("XYZ: %.1f, %.1f, %.1f", pos.X, pos.Y, pos.Z)
+	else
+		CoordsLabel.Text = "XYZ: ---"
+	end
+end)
+
+-- Точные координаты красного портала
+local PORTAL_POS = Vector3.new(-1210.0, 328.2, 4.0)
 
 local function walkToPortal()
 	local humanoid = getHumanoid()
@@ -172,23 +195,19 @@ local function walkToPortal()
 	if not humanoid or not hrp then return false end
 
 	updateStatus("Иду в портал...")
-
-	-- Идём пешком к порталу
 	humanoid:MoveTo(PORTAL_POS)
 
-	-- Ждём, пока дойдём (или таймаут)
 	local startTime = tick()
-	while (hrp.Position - PORTAL_POS).Magnitude > 6 do
+	while (hrp.Position - PORTAL_POS).Magnitude > 8 do
 		if not farming then return false end
-		if tick() - startTime > 12 then
-			-- Если долго не доходит — немного подталкиваем
+		if tick() - startTime > 15 then
 			humanoid:MoveTo(PORTAL_POS)
 			startTime = tick()
 		end
-		task.wait(0.2)
+		task.wait(0.25)
 	end
 
-	task.wait(0.4)
+	task.wait(0.5)
 	return true
 end
 
@@ -208,28 +227,25 @@ local function farmLoop()
 			continue
 		end
 
-		task.wait(0.8)
+		task.wait(0.9)
 
-		-- Идём пешком в красный портал
 		local success = walkToPortal()
 		if not success or not farming then break end
 
-		task.wait(0.3)
+		task.wait(0.35)
 
-		-- Используем способность
 		pressKey(Enum.KeyCode.E)
 		uses += 1
 		CounterLabel.Text = "Попыток: " .. uses
 		updateStatus("Способность использована")
 
-		task.wait(0.45)
+		task.wait(0.5)
 
-		-- Ресетим
 		resetCharacter()
 		updateStatus("Ресет...")
 
 		player.CharacterAdded:Wait()
-		task.wait(0.9)
+		task.wait(1)
 	end
 end
 
@@ -246,13 +262,11 @@ StopBtn.MouseButton1Click:Connect(function()
 	updateStatus("Остановлено")
 end)
 
--- × только скрывает GUI
 CloseBtn.MouseButton1Click:Connect(function()
 	guiVisible = false
 	Main.Visible = false
 end)
 
--- RightControl показывает/скрывает GUI
 UserInputService.InputBegan:Connect(function(input, gp)
 	if gp then return end
 	if input.KeyCode == Enum.KeyCode.RightControl then
@@ -261,7 +275,7 @@ UserInputService.InputBegan:Connect(function(input, gp)
 	end
 end)
 
--- Перетаскивание GUI
+-- Перетаскивание
 local dragging = false
 local dragStart, startPos
 
@@ -291,7 +305,7 @@ UserInputService.InputChanged:Connect(function(input)
 	end
 end)
 
--- Ховер-эффекты
+-- Ховер
 local function addHover(btn, normal, hover)
 	btn.MouseEnter:Connect(function()
 		TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = hover}):Play()
@@ -305,4 +319,4 @@ addHover(StartBtn, Color3.fromRGB(40, 170, 100), Color3.fromRGB(50, 195, 120))
 addHover(StopBtn, Color3.fromRGB(180, 55, 55), Color3.fromRGB(210, 70, 70))
 addHover(CloseBtn, Color3.fromRGB(45, 45, 55), Color3.fromRGB(70, 70, 85))
 
-print("Bob Farm загружен | RightCtrl — показать/скрыть GUI")
+print("Bob Farm загружен | Портал: -1210, 328.2, 4")
