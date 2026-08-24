@@ -1,15 +1,15 @@
--- Bob Auto Farm | Исправленный (с заходом в красный портал)
+-- Bob Auto Farm | Идёт пешком в портал + скрываемый GUI
 -- Delta / большинство executor'ов
 
 local Players = game:GetService("Players")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
-local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 local farming = false
 local uses = 0
+local guiVisible = true
 
 -- ==================== GUI ====================
 local ScreenGui = Instance.new("ScreenGui")
@@ -128,10 +128,10 @@ StopCorner.CornerRadius = UDim.new(0, 10)
 StopCorner.Parent = StopBtn
 
 local Hint = Instance.new("TextLabel")
-Hint.Size = UDim2.new(1, -24, 0, 50)
-Hint.Position = UDim2.new(0, 12, 1, -65)
+Hint.Size = UDim2.new(1, -24, 0, 55)
+Hint.Position = UDim2.new(0, 12, 1, -70)
 Hint.BackgroundTransparency = 1
-Hint.Text = "Экипируй Replica\nАлт должен быть в арене\nСкрипт сам заходит в портал"
+Hint.Text = "Экипируй Replica\nАлт должен быть в арене\n× скрывает GUI (RightCtrl — показать)"
 Hint.TextColor3 = Color3.fromRGB(110, 110, 130)
 Hint.Font = Enum.Font.Gotham
 Hint.TextSize = 12
@@ -149,67 +149,53 @@ local function pressKey(key)
 	VirtualInputManager:SendKeyEvent(false, key, false, game)
 end
 
+local function getChar()
+	return player.Character
+end
+
 local function getHRP()
-	local char = player.Character
-	if char then
-		return char:FindFirstChild("HumanoidRootPart")
-	end
+	local char = getChar()
+	return char and char:FindFirstChild("HumanoidRootPart")
 end
 
--- Ищем красный портал
-local function findPortal()
-	-- Обычно портал находится в workspace
-	for _, obj in pairs(workspace:GetDescendants()) do
-		if obj:IsA("BasePart") or obj:IsA("MeshPart") then
-			local name = string.lower(obj.Name)
-			if name:find("portal") or name:find("gate") or name:find("entrance") then
-				-- Красный портал обычно имеет красный цвет или находится в определённом месте
-				if obj.BrickColor == BrickColor.new("Really red") or 
-				   obj.Color == Color3.fromRGB(255, 0, 0) or
-				   obj.Color == Color3.fromRGB(170, 0, 0) or
-				   name:find("red") then
-					return obj
-				end
-			end
-		end
-	end
-
-	-- Запасной вариант: ищем по примерным координатам (стандартный спавн портала)
-	-- Красный портал обычно стоит примерно тут:
-	local approx = CFrame.new(-50, 5, 30) -- примерные координаты, может отличаться
-	return nil
+local function getHumanoid()
+	local char = getChar()
+	return char and char:FindFirstChildOfClass("Humanoid")
 end
 
-local function goToPortal()
+-- Координаты красного портала (основные)
+local PORTAL_POS = Vector3.new(-8.5, 3.5, 92)
+
+local function walkToPortal()
+	local humanoid = getHumanoid()
 	local hrp = getHRP()
-	if not hrp then return false end
+	if not humanoid or not hrp then return false end
 
-	-- Способ 1: Телепорт прямо к порталу (самый надёжный)
-	-- Координаты красного портала в Slap Battles (стандартные)
-	local portalCFrame = CFrame.new(-8.5, 3.5, 92) -- основные координаты красного портала
+	updateStatus("Иду в портал...")
 
-	-- Пробуем несколько возможных позиций портала
-	local possiblePortals = {
-		CFrame.new(-8.5, 3.5, 92),
-		CFrame.new(0, 5, 80),
-		CFrame.new(-20, 4, 100),
-	}
+	-- Идём пешком к порталу
+	humanoid:MoveTo(PORTAL_POS)
 
-	for _, cf in ipairs(possiblePortals) do
-		hrp.CFrame = cf
-		task.wait(0.15)
+	-- Ждём, пока дойдём (или таймаут)
+	local startTime = tick()
+	while (hrp.Position - PORTAL_POS).Magnitude > 6 do
+		if not farming then return false end
+		if tick() - startTime > 12 then
+			-- Если долго не доходит — немного подталкиваем
+			humanoid:MoveTo(PORTAL_POS)
+			startTime = tick()
+		end
+		task.wait(0.2)
 	end
 
-	-- Дополнительно двигаемся вперёд, чтобы точно войти
-	hrp.CFrame = hrp.CFrame * CFrame.new(0, 0, -5)
-	task.wait(0.3)
+	task.wait(0.4)
 	return true
 end
 
 local function resetCharacter()
-	local char = player.Character
-	if char and char:FindFirstChild("Humanoid") then
-		char.Humanoid.Health = 0
+	local humanoid = getHumanoid()
+	if humanoid then
+		humanoid.Health = 0
 	end
 end
 
@@ -217,18 +203,18 @@ local function farmLoop()
 	while farming do
 		local char = player.Character or player.CharacterAdded:Wait()
 		local humanoid = char:WaitForChild("Humanoid", 8)
-		if not humanoid then 
-			task.wait(1) 
-			continue 
+		if not humanoid then
+			task.wait(1)
+			continue
 		end
 
-		-- Ждём полной загрузки
-		task.wait(0.9)
+		task.wait(0.8)
 
-		-- Идём в красный портал
-		updateStatus("Иду в портал...")
-		goToPortal()
-		task.wait(0.6)
+		-- Идём пешком в красный портал
+		local success = walkToPortal()
+		if not success or not farming then break end
+
+		task.wait(0.3)
 
 		-- Используем способность
 		pressKey(Enum.KeyCode.E)
@@ -236,15 +222,14 @@ local function farmLoop()
 		CounterLabel.Text = "Попыток: " .. uses
 		updateStatus("Способность использована")
 
-		task.wait(0.4)
+		task.wait(0.45)
 
 		-- Ресетим
 		resetCharacter()
 		updateStatus("Ресет...")
 
-		-- Ждём респавна
 		player.CharacterAdded:Wait()
-		task.wait(0.8)
+		task.wait(0.9)
 	end
 end
 
@@ -261,17 +246,27 @@ StopBtn.MouseButton1Click:Connect(function()
 	updateStatus("Остановлено")
 end)
 
+-- × только скрывает GUI
 CloseBtn.MouseButton1Click:Connect(function()
-	farming = false
-	ScreenGui:Destroy()
+	guiVisible = false
+	Main.Visible = false
 end)
 
--- Перетаскивание
+-- RightControl показывает/скрывает GUI
+UserInputService.InputBegan:Connect(function(input, gp)
+	if gp then return end
+	if input.KeyCode == Enum.KeyCode.RightControl then
+		guiVisible = not guiVisible
+		Main.Visible = guiVisible
+	end
+end)
+
+-- Перетаскивание GUI
 local dragging = false
 local dragStart, startPos
 
 TopBar.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 		dragging = true
 		dragStart = input.Position
 		startPos = Main.Position
@@ -279,13 +274,13 @@ TopBar.InputBegan:Connect(function(input)
 end)
 
 TopBar.InputEnded:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 		dragging = false
 	end
 end)
 
 UserInputService.InputChanged:Connect(function(input)
-	if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+	if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
 		local delta = input.Position - dragStart
 		Main.Position = UDim2.new(
 			startPos.X.Scale,
@@ -296,7 +291,7 @@ UserInputService.InputChanged:Connect(function(input)
 	end
 end)
 
--- Ховер
+-- Ховер-эффекты
 local function addHover(btn, normal, hover)
 	btn.MouseEnter:Connect(function()
 		TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = hover}):Play()
@@ -310,4 +305,4 @@ addHover(StartBtn, Color3.fromRGB(40, 170, 100), Color3.fromRGB(50, 195, 120))
 addHover(StopBtn, Color3.fromRGB(180, 55, 55), Color3.fromRGB(210, 70, 70))
 addHover(CloseBtn, Color3.fromRGB(45, 45, 55), Color3.fromRGB(70, 70, 85))
 
-print("Bob Farm (с порталом) загружен")
+print("Bob Farm загружен | RightCtrl — показать/скрыть GUI")
