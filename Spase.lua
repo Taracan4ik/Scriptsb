@@ -1,5 +1,5 @@
--- Bob Auto Farm | Портал: -1210, 328.2, 4
--- Delta / большинство executor'ов
+-- Bob Auto Farm | Более стабильная версия
+-- Портал: -1210, 328.2, 4
 
 local Players = game:GetService("Players")
 local VirtualInputManager = game:GetService("VirtualInputManager")
@@ -20,7 +20,6 @@ ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.Parent = game:GetService("CoreGui")
 
 local Main = Instance.new("Frame")
-Main.Name = "Main"
 Main.Size = UDim2.new(0, 270, 0, 310)
 Main.Position = UDim2.new(0.5, -135, 0.5, -155)
 Main.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
@@ -156,26 +155,23 @@ local function updateStatus(text)
 end
 
 local function pressKey(key)
-	VirtualInputManager:SendKeyEvent(true, key, false, game)
-	task.wait(0.05)
-	VirtualInputManager:SendKeyEvent(false, key, false, game)
-end
-
-local function getChar()
-	return player.Character
+	pcall(function()
+		VirtualInputManager:SendKeyEvent(true, key, false, game)
+		task.wait(0.05)
+		VirtualInputManager:SendKeyEvent(false, key, false, game)
+	end)
 end
 
 local function getHRP()
-	local char = getChar()
+	local char = player.Character
 	return char and char:FindFirstChild("HumanoidRootPart")
 end
 
 local function getHumanoid()
-	local char = getChar()
+	local char = player.Character
 	return char and char:FindFirstChildOfClass("Humanoid")
 end
 
--- Координаты в реальном времени
 RunService.RenderStepped:Connect(function()
 	local hrp = getHRP()
 	if hrp then
@@ -186,29 +182,46 @@ RunService.RenderStepped:Connect(function()
 	end
 end)
 
--- Точные координаты красного портала
 local PORTAL_POS = Vector3.new(-1210.0, 328.2, 4.0)
 
 local function walkToPortal()
 	local humanoid = getHumanoid()
 	local hrp = getHRP()
-	if not humanoid or not hrp then return false end
-
-	updateStatus("Иду в портал...")
-	humanoid:MoveTo(PORTAL_POS)
-
-	local startTime = tick()
-	while (hrp.Position - PORTAL_POS).Magnitude > 8 do
-		if not farming then return false end
-		if tick() - startTime > 15 then
-			humanoid:MoveTo(PORTAL_POS)
-			startTime = tick()
-		end
-		task.wait(0.25)
+	if not humanoid or not hrp then 
+		updateStatus("Нет персонажа")
+		return false 
 	end
 
-	task.wait(0.5)
-	return true
+	updateStatus("Иду в портал...")
+	
+	-- Несколько попыток дойти
+	for attempt = 1, 4 do
+		if not farming then return false end
+		
+		humanoid:MoveTo(PORTAL_POS)
+		
+		local startTime = tick()
+		while (hrp.Position - PORTAL_POS).Magnitude > 9 do
+			if not farming then return false end
+			if not hrp or not hrp.Parent then return false end
+			
+			if tick() - startTime > 8 then
+				break -- пробуем заново
+			end
+			task.wait(0.2)
+		end
+		
+		if (hrp.Position - PORTAL_POS).Magnitude <= 9 then
+			task.wait(0.4)
+			return true
+		end
+		
+		updateStatus("Повтор пути... (" .. attempt .. ")")
+		task.wait(0.5)
+	end
+	
+	updateStatus("Не дошёл до портала")
+	return false
 end
 
 local function resetCharacter()
@@ -220,36 +233,48 @@ end
 
 local function farmLoop()
 	while farming do
-		local char = player.Character or player.CharacterAdded:Wait()
-		local humanoid = char:WaitForChild("Humanoid", 8)
-		if not humanoid then
+		local success, err = pcall(function()
+			local char = player.Character or player.CharacterAdded:Wait()
+			local humanoid = char:WaitForChild("Humanoid", 10)
+			
+			if not humanoid then
+				updateStatus("Humanoid не найден")
+				task.wait(1)
+				return
+			end
+
 			task.wait(1)
-			continue
+
+			local reached = walkToPortal()
+			if not reached then
+				updateStatus("Пропуск цикла (не дошёл)")
+				task.wait(1)
+				return
+			end
+
+			task.wait(0.3)
+
+			pressKey(Enum.KeyCode.E)
+			uses += 1
+			CounterLabel.Text = "Попыток: " .. uses
+			updateStatus("Способность использована")
+
+			task.wait(0.5)
+
+			resetCharacter()
+			updateStatus("Ресет...")
+
+			player.CharacterAdded:Wait()
+			task.wait(1.1)
+		end)
+
+		if not success then
+			updateStatus("Ошибка: " .. tostring(err))
+			task.wait(2)
 		end
-
-		task.wait(0.9)
-
-		local success = walkToPortal()
-		if not success or not farming then break end
-
-		task.wait(0.35)
-
-		pressKey(Enum.KeyCode.E)
-		uses += 1
-		CounterLabel.Text = "Попыток: " .. uses
-		updateStatus("Способность использована")
-
-		task.wait(0.5)
-
-		resetCharacter()
-		updateStatus("Ресет...")
-
-		player.CharacterAdded:Wait()
-		task.wait(1)
 	end
 end
 
--- Кнопки
 StartBtn.MouseButton1Click:Connect(function()
 	if farming then return end
 	farming = true
@@ -275,9 +300,7 @@ UserInputService.InputBegan:Connect(function(input, gp)
 	end
 end)
 
--- Перетаскивание
-local dragging = false
-local dragStart, startPos
+local dragging, dragStart, startPos = false, nil, nil
 
 TopBar.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -296,16 +319,10 @@ end)
 UserInputService.InputChanged:Connect(function(input)
 	if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
 		local delta = input.Position - dragStart
-		Main.Position = UDim2.new(
-			startPos.X.Scale,
-			startPos.X.Offset + delta.X,
-			startPos.Y.Scale,
-			startPos.Y.Offset + delta.Y
-		)
+		Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
 	end
 end)
 
--- Ховер
 local function addHover(btn, normal, hover)
 	btn.MouseEnter:Connect(function()
 		TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = hover}):Play()
@@ -319,4 +336,4 @@ addHover(StartBtn, Color3.fromRGB(40, 170, 100), Color3.fromRGB(50, 195, 120))
 addHover(StopBtn, Color3.fromRGB(180, 55, 55), Color3.fromRGB(210, 70, 70))
 addHover(CloseBtn, Color3.fromRGB(45, 45, 55), Color3.fromRGB(70, 70, 85))
 
-print("Bob Farm загружен | Портал: -1210, 328.2, 4")
+print("Bob Farm (стабильная версия) загружен")
